@@ -1,0 +1,40 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: atlantis-config-gen
+    steps:
+      - uses: actions/checkout@v4
+
+      # setup-go pulls the official .tar.gz (not .tar.xz), so it works on the
+      # minimal self-hosted runner. The version comes straight from go.mod.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Unit tests
+        run: go test ./... -count=1
+
+      # Smoke-test the built binary the way a user runs it: generate config for
+      # the sample repo and confirm --diff reports it as up to date (idempotent).
+      - name: CLI smoke test
+        run: |
+          set -eux
+          go build -ldflags "-X main.version=ci" -o atlantis-config-gen .
+          ./atlantis-config-gen --root examples/sample --out /tmp/atlantis.yaml
+          ./atlantis-config-gen --root examples/sample --out /tmp/atlantis.yaml --diff
+          # The committed example must match a fresh generation.
+          ./atlantis-config-gen --root examples/sample --out examples/sample/atlantis.yaml --diff

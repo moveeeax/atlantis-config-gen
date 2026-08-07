@@ -1,0 +1,10 @@
+# Built binary — anchored to the repo root so it never matches a source dir.
+/atlantis-config-gen
+
+# Go build/test artifacts
+*.test
+*.out
+/dist/
+
+# Never ignore fixtures the tests depend on.
+!examples/**
