@@ -8,12 +8,11 @@ on:
 
 jobs:
   test:
-    runs-on: atlantis-config-gen
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # setup-go pulls the official .tar.gz (not .tar.xz), so it works on the
-      # minimal self-hosted runner. The version comes straight from go.mod.
+      # Go version comes straight from go.mod.
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
