@@ -1,7 +1,7 @@
 # atlantis-config-gen
 
 [![ci](https://github.com/moveeeax/atlantis-config-gen/actions/workflows/ci.yml/badge.svg)](https://github.com/moveeeax/atlantis-config-gen/actions/workflows/ci.yml)
-[![Go](https://img.shields.io/badge/go-1.22-00ADD8?logo=go&logoColor=white)](go.mod)
+[![Go](https://img.shields.io/badge/go-1.26%20%7C%201.27-00ADD8?logo=go&logoColor=white)](go.mod)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 Stop hand-writing `atlantis.yaml`. `atlantis-config-gen` derives it from your
@@ -40,6 +40,8 @@ emitted relative to the project directory, exactly how Atlantis evaluates
 `when_modified`.
 
 ## Install
+
+Requires Go 1.26 or newer (CI tests 1.26 and 1.27).
 
 ```shell
 go install github.com/moveeeax/atlantis-config-gen@latest
