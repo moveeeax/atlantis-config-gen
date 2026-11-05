@@ -6,16 +6,23 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ['1.26', '1.27']
+    name: test (go ${{ matrix.go }})
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      # Go version comes straight from go.mod.
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: ${{ matrix.go }}
           cache: true
 
       - name: Build
