@@ -12,7 +12,7 @@ import (
 	"text/template"
 
 	"github.com/pmezard/go-difflib/difflib"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/moveeeax/atlantis-config-gen/internal/discover"
 )
