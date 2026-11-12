@@ -119,6 +119,62 @@ func TestUnifiedDiffDetectsChange(t *testing.T) {
 	}
 }
 
+func TestTerraformVersionAndDistribution(t *testing.T) {
+	roots := []discover.RootModule{
+		{Dir: "a", HasProvider: true, RequiredVersion: "1.9.8"},
+		{Dir: "b", HasProvider: true, TerraformVersionFile: "1.10.5", OpenTofuVersionFile: "1.8.3"},
+		{Dir: "c", HasProvider: true, TerraformVersionFile: "1.10.5"},
+		{Dir: "d", HasProvider: true},
+		// An exact required_version beats a disagreeing version file.
+		{Dir: "e", HasProvider: true, RequiredVersion: "1.9.8", TerraformVersionFile: "1.10.5", OpenTofuVersionFile: "1.8.3"},
+	}
+	cases := []struct {
+		dist string
+		want map[string]string // dir -> terraform_version
+	}{
+		{"", map[string]string{"a": "1.9.8", "b": "1.10.5", "c": "1.10.5", "d": "", "e": "1.9.8"}},
+		{DistributionTerraform, map[string]string{"a": "1.9.8", "b": "1.10.5", "c": "1.10.5", "d": "", "e": "1.9.8"}},
+		// opentofu reads .opentofu-version and ignores .terraform-version.
+		{DistributionOpenTofu, map[string]string{"a": "1.9.8", "b": "1.8.3", "c": "", "d": "", "e": "1.9.8"}},
+	}
+	for _, tc := range cases {
+		cfg, err := Build(roots, Options{Distribution: tc.dist})
+		if err != nil {
+			t.Fatalf("Build(%q): %v", tc.dist, err)
+		}
+		for _, p := range cfg.Projects {
+			if p.TerraformVersion != tc.want[p.Dir] {
+				t.Errorf("dist %q: %s terraform_version = %q, want %q", tc.dist, p.Dir, p.TerraformVersion, tc.want[p.Dir])
+			}
+			if p.TerraformDist != tc.dist {
+				t.Errorf("dist %q: %s terraform_distribution = %q", tc.dist, p.Dir, p.TerraformDist)
+			}
+		}
+	}
+
+	cfg, _ := Build(roots[1:2], Options{Distribution: DistributionOpenTofu})
+	out, err := Render(cfg)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	for _, want := range []string{"terraform_distribution: opentofu\n", "terraform_version: 1.8.3\n"} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("rendered config missing %q:\n%s", want, out)
+		}
+	}
+	cfg, _ = Build(roots[3:4], Options{})
+	out, _ = Render(cfg)
+	if strings.Contains(string(out), "terraform_") {
+		t.Errorf("unpinned project should omit terraform_* keys:\n%s", out)
+	}
+}
+
+func TestUnknownDistributionRejected(t *testing.T) {
+	if _, err := Build(sampleRoots(), Options{Distribution: "tofu"}); err == nil {
+		t.Fatal("expected an error for an unknown distribution")
+	}
+}
+
 func keys(m map[string]Project) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

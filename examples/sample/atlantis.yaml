@@ -4,6 +4,7 @@ projects:
   - name: dev
     dir: envs/dev
     workspace: default
+    terraform_version: 1.9.8
     autoplan:
       when_modified:
         - '*.hcl'
@@ -58,6 +59,7 @@ projects:
   - name: standalone
     dir: standalone
     workspace: default
+    terraform_version: 1.10.5
     autoplan:
       when_modified:
         - '*.hcl'

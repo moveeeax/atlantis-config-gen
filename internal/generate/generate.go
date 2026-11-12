@@ -27,7 +27,18 @@ type Options struct {
 	NameTemplate string // Go template evaluated per project
 	Automerge    bool
 	Parallel     bool // sets parallel_plan and parallel_apply
+	// Distribution is "", "terraform" or "opentofu". When set it is written as
+	// terraform_distribution on every project and selects which version file
+	// (.terraform-version or .opentofu-version) pins terraform_version.
+	Distribution string
 }
+
+// Supported values for Options.Distribution, as accepted by Atlantis'
+// terraform_distribution key.
+const (
+	DistributionTerraform = "terraform"
+	DistributionOpenTofu  = "opentofu"
+)
 
 // Config is the subset of the Atlantis repo config we emit.
 type Config struct {
@@ -44,6 +55,8 @@ type Project struct {
 	Dir               string   `yaml:"dir"`
 	Workspace         string   `yaml:"workspace,omitempty"`
 	Workflow          string   `yaml:"workflow,omitempty"`
+	TerraformDist     string   `yaml:"terraform_distribution,omitempty"`
+	TerraformVersion  string   `yaml:"terraform_version,omitempty"`
 	Autoplan          Autoplan `yaml:"autoplan"`
 	ApplyRequirements []string `yaml:"apply_requirements,omitempty"`
 }
@@ -70,6 +83,12 @@ func Build(roots []discover.RootModule, opt Options) (*Config, error) {
 	tmpl, err := template.New("name").Parse(opt.NameTemplate)
 	if err != nil {
 		return nil, fmt.Errorf("parse name-template: %w", err)
+	}
+	switch opt.Distribution {
+	case "", DistributionTerraform, DistributionOpenTofu:
+	default:
+		return nil, fmt.Errorf("unknown tf-distribution %q (want %q or %q)",
+			opt.Distribution, DistributionTerraform, DistributionOpenTofu)
 	}
 
 	cfg := &Config{
@@ -133,9 +152,27 @@ func project(rm discover.RootModule, env string, triggers []string, opt Options,
 		Dir:               rm.Dir,
 		Workspace:         workspace,
 		Workflow:          opt.Workflow,
+		TerraformDist:     opt.Distribution,
+		TerraformVersion:  terraformVersion(rm, opt.Distribution),
 		Autoplan:          Autoplan{WhenModified: triggers, Enabled: true},
 		ApplyRequirements: []string{"approved"},
 	}, nil
+}
+
+// terraformVersion picks the exact version to pin for a root. An exact
+// required_version wins: Terraform and OpenTofu refuse to run any other version,
+// so a version file disagreeing with it would only break the plan. Otherwise
+// the version file matching the distribution is used (.opentofu-version for
+// opentofu, .terraform-version otherwise). "" means no pin, and Atlantis falls
+// back to its own required_version handling or the server default.
+func terraformVersion(rm discover.RootModule, dist string) string {
+	if rm.RequiredVersion != "" {
+		return rm.RequiredVersion
+	}
+	if dist == DistributionOpenTofu {
+		return rm.OpenTofuVersionFile
+	}
+	return rm.TerraformVersionFile
 }
 
 // whenModified builds the autoplan trigger list for a root: its own Terraform
