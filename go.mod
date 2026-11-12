@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/hashicorp/hcl/v2 v2.25.0
 	github.com/pmezard/go-difflib v1.0.0
-	github.com/zclconf/go-cty v1.19.0
+	github.com/zclconf/go-cty v1.20.0
 	go.yaml.in/yaml/v3 v3.0.6
 )
 
