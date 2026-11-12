@@ -22,6 +22,13 @@ down.
   become one project per environment with a matching `workspace`.
   `terraform.tfvars` and `*.auto.tfvars` are auto-loaded defaults, so they don't
   spawn environments.
+- **Pins the Terraform/OpenTofu version** — an exact `required_version`
+  (`"1.9.8"` or `"= 1.9.8"`) becomes the project's `terraform_version`. Without
+  one, the nearest `.terraform-version` (or `.opentofu-version` with
+  `--tf-distribution opentofu`) is used, searched from the project dir up to
+  the repo root like tfenv/tofuenv do. Ranges such as `">= 1.5.0"` and
+  non-exact file values such as `latest` pin nothing, so Atlantis keeps its own
+  default. `--tf-distribution` also writes `terraform_distribution`.
 - **Diff mode** — `--diff` prints a unified diff against the existing file and
   exits non-zero when they differ, so CI can fail on drift without writing.
 - **Idempotent** — projects and trigger lists are fully sorted; re-running on an
@@ -102,6 +109,7 @@ atlantis-config-gen --root . --out atlantis.yaml --diff
 | `--name-template` | `{{.Base}}{{if .Env}}-{{.Env}}{{end}}` | Go template for project names. |
 | `--automerge` | `false` | Set `automerge: true`. |
 | `--parallel` | `false` | Set `parallel_plan` and `parallel_apply`. |
+| `--tf-distribution` | `` | `terraform` or `opentofu`: set `terraform_distribution` on every project and pick the matching version file. |
 
 ## Development
 

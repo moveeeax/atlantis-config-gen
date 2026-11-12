@@ -1,6 +1,8 @@
 package discover
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -93,6 +95,81 @@ func TestIsLocalSource(t *testing.T) {
 	for src, want := range cases {
 		if got := isLocalSource(src); got != want {
 			t.Errorf("isLocalSource(%q) = %v, want %v", src, got, want)
+		}
+	}
+}
+
+func TestExactVersion(t *testing.T) {
+	cases := map[string]string{
+		"1.9.8":           "1.9.8",
+		"= 1.9.8":         "1.9.8",
+		"=1.9.8":          "1.9.8",
+		" v1.6.0-beta1 ":  "1.6.0-beta1",
+		">= 1.5.0":        "",
+		"~> 1.9.0":        "",
+		"1.9":             "",
+		"1.9.8, != 1.9.7": "",
+		"latest":          "",
+		"latest:^1.5":     "",
+		"":                "",
+	}
+	for in, want := range cases {
+		if got := exactVersion(in); got != want {
+			t.Errorf("exactVersion(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// writeFiles creates files (slash-separated paths relative to dir) with the
+// given contents.
+func writeFiles(t *testing.T, dir string, files map[string]string) {
+	t.Helper()
+	for name, body := range files {
+		p := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestVersionPins(t *testing.T) {
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		// Exact required_version, no version files.
+		"pinned/main.tf": "terraform {\n  required_version = \"= 1.9.8\"\n}\nprovider \"aws\" {}\n",
+		// Range constraint: nothing pinned from HCL; inherits the repo-level
+		// .terraform-version.
+		"ranged/main.tf": "terraform {\n  required_version = \">= 1.5.0\"\n}\nprovider \"aws\" {}\n",
+		// Nearer files override the repo-level ones.
+		"nested/app/main.tf":           "provider \"aws\" {}\n",
+		"nested/.terraform-version":    "1.10.5\n",
+		"nested/app/.opentofu-version": "1.8.3\n",
+		// The nearest file is "latest": not exact, and it still shadows the
+		// repo-level file.
+		"floating/main.tf":            "provider \"aws\" {}\n",
+		"floating/.terraform-version": "latest\n",
+		".terraform-version":          "1.7.0\n",
+	})
+	roots, err := Scan(dir)
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+
+	type pins struct{ req, tf, tofu string }
+	want := map[string]pins{
+		"pinned":     {req: "1.9.8", tf: "1.7.0"},
+		"ranged":     {tf: "1.7.0"},
+		"nested/app": {tf: "1.10.5", tofu: "1.8.3"},
+		"floating":   {},
+	}
+	for d, w := range want {
+		r := findRoot(t, roots, d)
+		got := pins{r.RequiredVersion, r.TerraformVersionFile, r.OpenTofuVersionFile}
+		if got != w {
+			t.Errorf("%s pins = %+v, want %+v", d, got, w)
 		}
 	}
 }

@@ -5,7 +5,10 @@ package discover
 
 import (
 	"io/fs"
+	"os"
+	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -23,6 +26,17 @@ type RootModule struct {
 	HasTFVars    bool     // has any *.tfvars / *.tfvars.json file
 	Environments []string // env-selecting tfvars stems (excludes auto/terraform tfvars), sorted
 	ModuleDeps   []string // transitively-used local module dirs, sorted
+
+	// RequiredVersion is the version pinned by terraform { required_version }
+	// when the constraint names exactly one version ("1.9.8" or "= 1.9.8").
+	// Ranges such as ">= 1.5.0" leave it empty.
+	RequiredVersion string
+	// TerraformVersionFile and OpenTofuVersionFile hold the exact version read
+	// from the nearest .terraform-version / .opentofu-version file, searched
+	// from Dir up to the scan root (the tfenv/tofuenv lookup order). Values
+	// that are not an exact version, like "latest", leave them empty.
+	TerraformVersionFile string
+	OpenTofuVersionFile  string
 }
 
 // moduleInfo is the raw per-directory data gathered before roots are selected.
@@ -32,6 +46,7 @@ type moduleInfo struct {
 	hasTFVars   bool
 	localCalls  []string // resolved dirs (relative to root) of local module sources
 	environ     []string // env-selecting tfvars stems
+	requiredVer string   // exact required_version, "" when absent or a range
 }
 
 // Scan walks root and returns every root module, sorted by Dir.
@@ -72,12 +87,15 @@ func Scan(root string) ([]RootModule, error) {
 			continue
 		}
 		roots = append(roots, RootModule{
-			Dir:          rel,
-			HasBackend:   info.hasBackend,
-			HasProvider:  info.hasProvider,
-			HasTFVars:    info.hasTFVars,
-			Environments: info.environ,
-			ModuleDeps:   transitiveDeps(rel, infos),
+			Dir:                  rel,
+			HasBackend:           info.hasBackend,
+			HasProvider:          info.hasProvider,
+			HasTFVars:            info.hasTFVars,
+			Environments:         info.environ,
+			ModuleDeps:           transitiveDeps(rel, infos),
+			RequiredVersion:      info.requiredVer,
+			TerraformVersionFile: versionFile(root, rel, ".terraform-version"),
+			OpenTofuVersionFile:  versionFile(root, rel, ".opentofu-version"),
 		})
 	}
 	sort.Slice(roots, func(i, j int) bool { return roots[i].Dir < roots[j].Dir })
@@ -114,6 +132,9 @@ func parseDir(root, dir string) (*moduleInfo, bool, error) {
 			case "provider":
 				info.hasProvider = true
 			case "terraform":
+				if info.requiredVer == "" {
+					info.requiredVer = exactVersion(stringAttr(b.Body, "required_version"))
+				}
 				for _, ib := range b.Body.Blocks {
 					if ib.Type == "backend" || ib.Type == "cloud" {
 						info.hasBackend = true
@@ -157,6 +178,37 @@ func tfvarsEnvironments(dir string) (envs []string, hasAny bool) {
 	}
 	sort.Strings(envs)
 	return envs, hasAny
+}
+
+// exactVersionRe matches a single pinned version with an optional "=" operator
+// and "v" prefix: "1.9.8", "= 1.9.8", "v1.6.0-beta1".
+var exactVersionRe = regexp.MustCompile(`^=?\s*v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$`)
+
+// exactVersion returns the version a constraint pins, without a "v" prefix, or
+// "" when the constraint allows more than one version (or is empty).
+func exactVersion(constraint string) string {
+	m := exactVersionRe.FindStringSubmatch(strings.TrimSpace(constraint))
+	if m == nil {
+		return ""
+	}
+	return m[1]
+}
+
+// versionFile looks for name in dir and each parent up to root, the way tfenv
+// and tofuenv resolve .terraform-version / .opentofu-version, and returns the
+// exact version from the first file found. The nearest file wins even when its
+// content is not an exact version (e.g. "latest"), in which case "" is returned.
+func versionFile(root, dir, name string) string {
+	for cur := dir; ; cur = path.Dir(cur) {
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(cur), name))
+		if err == nil {
+			line, _, _ := strings.Cut(string(data), "\n")
+			return exactVersion(line)
+		}
+		if cur == "." {
+			return ""
+		}
+	}
 }
 
 // transitiveDeps returns the local module directories reachable from start via

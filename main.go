@@ -33,6 +33,8 @@ func run(args []string, stdout, stderr *os.File) error {
 		"Go template for project names (fields: .Dir .Base .Path .Env)")
 	automerge := fs.Bool("automerge", false, "set automerge: true in the generated config")
 	parallel := fs.Bool("parallel", false, "set parallel_plan and parallel_apply: true")
+	tfDist := fs.String("tf-distribution", "",
+		`set terraform_distribution on every project ("terraform" or "opentofu")`)
 	showVer := fs.Bool("version", false, "print version and exit")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -51,6 +53,7 @@ func run(args []string, stdout, stderr *os.File) error {
 		NameTemplate: *nameTmpl,
 		Automerge:    *automerge,
 		Parallel:     *parallel,
+		Distribution: *tfDist,
 	})
 	if err != nil {
 		return err
